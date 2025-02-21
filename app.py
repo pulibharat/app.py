@@ -1,29 +1,19 @@
+
+
+
+
 import google.generativeai as genai
-from flask import Flask, render_template, request, redirect, url_for
-import os
+import streamlit as st
 
-# Configure your Gemini API Key
-genai.configure(api_key="YOUR_API_KEY_HERE")  # Replace with your actual API key
+genai.configure(api_key="AIzaSyDBx7bWJqgFu1BJyi5RZNNpGc54cqxT8Ms")
 
-# Flask application setup
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
-
-# Make sure the upload folder exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# Function to check allowed file extensions
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
-
-# Function to upload image to Gemini
 def upload_to_gemini(path, mime_type=None):
     """Uploads the given file to Gemini."""
     file = genai.upload_file(path, mime_type=mime_type)
+    st.write(f"Uploaded file '{file.display_name}' as: {file.uri}")
     return file
 
-# Set generation configuration
+
 generation_config = {
     "temperature": 1,
     "top_p": 0.95,
@@ -32,35 +22,31 @@ generation_config = {
     "response_mime_type": "text/plain",
 }
 
-# Set up the generative model
 model = genai.GenerativeModel(
     model_name="gemini-2.0-flash",  
     generation_config=generation_config,
 )
 
-# Home route
-@app.route('/')
-def home():
-    return render_template('index.html')
+st.title("AI Disease Image Analysis")
+st.subheader("Upload a disease image, and the AI will analyze it in-depth and provide detailed insights.")
 
-# Route for uploading the image
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'file' not in request.files:
-        return redirect(request.url)
-    file = request.files['file']
-    
-    if file and allowed_file(file.filename):
-        filename = os.path.join(app.config['UPLOAD_FOLDER'], 'uploaded_image.jpeg')
-        file.save(filename)
+# Upload file
+uploaded_file = st.file_uploader("Upload a Disease Image", type=["jpeg", "jpg", "png"])
 
-        # Upload the image to Gemini
-        uploaded_image = upload_to_gemini(filename, mime_type="image/jpeg")
+if uploaded_file:
 
-        # Get a user question for in-depth analysis
-        user_question = request.form.get('question', 'Please analyze this image and provide detailed information about the disease, including symptoms, causes, diagnosis, treatment, and prognosis.')
+    with open("uploaded_image.jpeg", "wb") as f:
+        f.write(uploaded_file.getbuffer())
 
-        # Constructing a detailed prompt
+    # Upload the image to Gemini
+    uploaded_image = upload_to_gemini("uploaded_image.jpeg", mime_type="image/jpeg")
+
+    # Get a user question for in-depth analysis
+    user_question = st.text_input("Ask a detailed question about the image:", 
+                                  "Please analyze this image and provide detailed information about the disease, including symptoms, causes, diagnosis, treatment, and prognosis.")
+
+    if user_question:
+        # Constructing a detailed prompt to get in-depth analysis
         detailed_prompt = (
             f"Please analyze the image in detail and provide the following information:\n"
             f"1. What disease is depicted in the image?\n"
@@ -72,7 +58,7 @@ def upload_file():
             f"7. What is the prognosis or expected outcome for patients with this disease?\n"
         )
 
-        # Start the AI chat session
+    
         chat_session = model.start_chat(
             history=[
                 {
@@ -91,18 +77,14 @@ def upload_file():
             ]
         )
 
-        # Get the AI's response
+        
         response = chat_session.send_message(detailed_prompt)
 
-        # Return the response to the user
+        
         colored_response = response.text.replace("disease", '<span style="color:red;">disease</span>')
         colored_response = colored_response.replace("treatment", '<span style="color:blue;">treatment</span>')
 
-        return render_template('result.html', response=colored_response)
-
-    return redirect(url_for('home'))
-
-if __name__ == '__main__':
-    # Don't run the server with `app.run()` in production
-    # Gunicorn will take care of it
-    app.run(debug=False)
+        
+        st.markdown(f"AI Response: {colored_response}", unsafe_allow_html=True)
+else:
+    st.write("Please upload a disease image to get started.")
